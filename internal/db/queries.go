@@ -195,3 +195,12 @@ func GetReview(bookID int64) (string, error) {
 	}
 	return review.String, nil
 }
+
+func DeleteBook(bookID int64) error {
+	_, err := DB.Exec(`DELETE FROM reading_entries WHERE book_id = ?`, bookID)
+	if err != nil {
+		return err
+	}
+	_, err = DB.Exec(`DELETE FROM books WHERE id = ?`, bookID)
+	return err
+}

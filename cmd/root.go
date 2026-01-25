@@ -38,4 +38,5 @@ func init() {
 	rootCmd.AddCommand(statsCmd)
 	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(publishCmd)
+	rootCmd.AddCommand(removeCmd)
 }

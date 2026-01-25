@@ -69,6 +69,13 @@ bookshelf rate <id> <1-5>  # Rate from 1 to 5 stars
 bookshelf review <id>      # Opens $EDITOR to write/edit your review
 ```
 
+### Removing Books
+
+```bash
+bookshelf remove <id>      # Remove a book (prompts for confirmation)
+bookshelf remove <id> -f   # Remove without confirmation
+```
+
 ### Statistics
 
 View your reading stats:

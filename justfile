@@ -56,6 +56,14 @@ rate id rating:
 review id:
     go run . review {{id}}
 
+# Remove a book
+remove id:
+    go run . remove {{id}}
+
+# Remove a book without confirmation
+remove-force id:
+    go run . remove {{id}} --force
+
 # Show reading statistics
 stats:
     go run . stats
