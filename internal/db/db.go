@@ -47,6 +47,7 @@ func Migrate() error {
 		cover_url TEXT,
 		description TEXT,
 		open_library_key TEXT,
+		genres TEXT,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 
@@ -66,8 +67,14 @@ func Migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_reading_entries_status ON reading_entries(status);
 	`
 
-	_, err := DB.Exec(schema)
-	return err
+	if _, err := DB.Exec(schema); err != nil {
+		return err
+	}
+
+	// Add genres column to existing databases (ignore error if column already exists)
+	DB.Exec("ALTER TABLE books ADD COLUMN genres TEXT")
+
+	return nil
 }
 
 func Close() error {

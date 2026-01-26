@@ -3,6 +3,7 @@ package publish
 import (
 	"bookshelf/internal/db"
 	"bookshelf/internal/models"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"os"
@@ -158,6 +159,16 @@ func templateFuncs() template.FuncMap {
 		"openLibraryURL": func(key string) string {
 			return "https://openlibrary.org" + key
 		},
+		"parseGenres": func(genresJSON string) []string {
+			if genresJSON == "" {
+				return nil
+			}
+			var genres []string
+			if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
+				return nil
+			}
+			return genres
+		},
 	}
 }
 
@@ -242,6 +253,13 @@ const indexTemplate = `<!DOCTYPE html>
                         <span class="status {{statusClass .ReadingEntry.Status}}">{{.ReadingEntry.Status}}</span>
                         {{if .ReadingEntry.Rating.Valid}}
                         <span class="rating">{{stars .ReadingEntry.Rating.Int64}}</span>
+                        {{end}}
+                        {{if .Book.Genres.Valid}}
+                        <div class="genres">
+                            {{range parseGenres .Book.Genres.String}}
+                            <span class="genre-tag">{{.}}</span>
+                            {{end}}
+                        </div>
                         {{end}}
                     </div>
                 </article>
@@ -343,6 +361,15 @@ const bookTemplate = `<!DOCTYPE html>
                         {{if and .Book.ReadingEntry.StartedAt.Valid .Book.ReadingEntry.FinishedAt.Valid}}
                         <dt>Reading Time</dt>
                         <dd>{{readingDays .Book.ReadingEntry.StartedAt.Time .Book.ReadingEntry.FinishedAt.Time}} days</dd>
+                        {{end}}
+
+                        {{if .Book.Book.Genres.Valid}}
+                        <dt>Genres</dt>
+                        <dd class="genres-list">
+                            {{range parseGenres .Book.Book.Genres.String}}
+                            <span class="genre-tag">{{.}}</span>
+                            {{end}}
+                        </dd>
                         {{end}}
                     </dl>
 
@@ -667,6 +694,34 @@ main {
     color: #f39c12;
     font-size: 0.9rem;
     margin-left: 0.5rem;
+}
+
+.genres {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.genre-tag {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    background: var(--border);
+    color: var(--text-secondary);
+    border-radius: 12px;
+    font-size: 0.7rem;
+    text-transform: lowercase;
+}
+
+.genres-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.genres-list .genre-tag {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.75rem;
 }
 
 /* Book detail page */

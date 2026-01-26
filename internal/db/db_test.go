@@ -47,7 +47,7 @@ func TestAddBook(t *testing.T) {
 	olKey := "/works/OL123"
 	pages := 352
 
-	id, err := AddBook("The Pragmatic Programmer", "Andy Hunt", &isbn, &coverURL, &description, &olKey, &pages)
+	id, err := AddBook("The Pragmatic Programmer", "Andy Hunt", &isbn, &coverURL, &description, &olKey, nil, &pages)
 	if err != nil {
 		t.Fatalf("failed to add book: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestAddBookMinimalFields(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, err := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, err := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to add book: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestCreateReadingEntry(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 
 	err := CreateReadingEntry(id, models.StatusWantToRead)
 	if err != nil {
@@ -87,7 +87,7 @@ func TestGetBook(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id, models.StatusWantToRead)
 
 	book, err := GetBook(id)
@@ -123,13 +123,13 @@ func TestListBooks(t *testing.T) {
 	defer cleanup()
 
 	// Add multiple books
-	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil)
+	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id1, models.StatusWantToRead)
 
-	id2, _ := AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil)
+	id2, _ := AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id2, models.StatusReading)
 
-	id3, _ := AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil)
+	id3, _ := AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id3, models.StatusFinished)
 
 	// List all books
@@ -147,13 +147,13 @@ func TestListBooksWithFilter(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil)
+	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id1, models.StatusWantToRead)
 
-	id2, _ := AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil)
+	id2, _ := AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id2, models.StatusReading)
 
-	id3, _ := AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil)
+	id3, _ := AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id3, models.StatusFinished)
 
 	// Filter by status
@@ -176,7 +176,7 @@ func TestUpdateStatus(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id, models.StatusWantToRead)
 
 	// Update to reading
@@ -214,7 +214,7 @@ func TestUpdateRating(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id, models.StatusFinished)
 
 	err := UpdateRating(id, 5)
@@ -232,7 +232,7 @@ func TestUpdateReview(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id, models.StatusFinished)
 
 	review := "This was a great book!"
@@ -251,7 +251,7 @@ func TestGetReview(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id, models.StatusFinished)
 
 	expectedReview := "Great book!"
@@ -271,7 +271,7 @@ func TestBookExists(t *testing.T) {
 	cleanup := setupTestDB(t)
 	defer cleanup()
 
-	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 
 	exists, err := BookExists(id)
 	if err != nil {
@@ -297,18 +297,18 @@ func TestGetStats(t *testing.T) {
 	defer cleanup()
 
 	// Add books with different statuses
-	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil)
+	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id1, models.StatusWantToRead)
 
-	id2, _ := AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil)
+	id2, _ := AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id2, models.StatusReading)
 
 	pages := 300
-	id3, _ := AddBook("Book 3", "Author 3", nil, nil, nil, nil, &pages)
+	id3, _ := AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil, &pages)
 	CreateReadingEntry(id3, models.StatusFinished)
 	UpdateRating(id3, 4)
 
-	id4, _ := AddBook("Book 4", "Author 4", nil, nil, nil, nil, nil)
+	id4, _ := AddBook("Book 4", "Author 4", nil, nil, nil, nil, nil, nil)
 	CreateReadingEntry(id4, models.StatusFinished)
 	UpdateRating(id4, 5)
 

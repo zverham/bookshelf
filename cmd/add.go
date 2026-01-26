@@ -5,6 +5,7 @@ import (
 	"bookshelf/internal/db"
 	"bookshelf/internal/models"
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"strconv"
@@ -66,10 +67,18 @@ func runAdd(cmd *cobra.Command, args []string) error {
 
 	// Fetch additional details if available
 	var description *string
+	var genres *string
 	if selected.Key != "" {
 		work, err := client.GetWorkDetails(selected.Key)
 		if err == nil {
 			description = work.DescriptionText()
+			// Get top 5 subjects as genres
+			if subjects := work.TopSubjects(5); len(subjects) > 0 {
+				if jsonBytes, err := json.Marshal(subjects); err == nil {
+					jsonStr := string(jsonBytes)
+					genres = &jsonStr
+				}
+			}
 		}
 	}
 
@@ -80,6 +89,7 @@ func runAdd(cmd *cobra.Command, args []string) error {
 		selected.CoverURL(),
 		description,
 		&selected.Key,
+		genres,
 		selected.Pages(),
 	)
 	if err != nil {

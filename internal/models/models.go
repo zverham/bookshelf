@@ -22,6 +22,7 @@ type Book struct {
 	CoverURL       sql.NullString
 	Description    sql.NullString
 	OpenLibraryKey sql.NullString
+	Genres         sql.NullString
 	CreatedAt      time.Time
 }
 

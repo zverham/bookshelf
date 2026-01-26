@@ -39,13 +39,13 @@ func TestPrintStatsWithBooks(t *testing.T) {
 	defer cleanup()
 
 	// Add books
-	id1, _ := db.AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil)
+	id1, _ := db.AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil, nil)
 	db.CreateReadingEntry(id1, models.StatusWantToRead)
 
-	id2, _ := db.AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil)
+	id2, _ := db.AddBook("Book 2", "Author 2", nil, nil, nil, nil, nil, nil)
 	db.CreateReadingEntry(id2, models.StatusReading)
 
-	id3, _ := db.AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil)
+	id3, _ := db.AddBook("Book 3", "Author 3", nil, nil, nil, nil, nil, nil)
 	db.CreateReadingEntry(id3, models.StatusFinished)
 	db.UpdateRating(id3, 4)
 

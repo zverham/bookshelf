@@ -93,6 +93,7 @@ type WorkDetails struct {
 	Key         string      `json:"key"`
 	Title       string      `json:"title"`
 	Description interface{} `json:"description"`
+	Subjects    []string    `json:"subjects"`
 }
 
 func (w *WorkDetails) DescriptionText() *string {
@@ -105,6 +106,14 @@ func (w *WorkDetails) DescriptionText() *string {
 		}
 	}
 	return nil
+}
+
+// TopSubjects returns the first n subjects, or all if less than n.
+func (w *WorkDetails) TopSubjects(max int) []string {
+	if len(w.Subjects) <= max {
+		return w.Subjects
+	}
+	return w.Subjects[:max]
 }
 
 func (c *Client) GetWorkDetails(key string) (*WorkDetails, error) {

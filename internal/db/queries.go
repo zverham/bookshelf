@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-func AddBook(title, author string, isbn, coverURL, description, openLibraryKey *string, pages *int) (int64, error) {
+func AddBook(title, author string, isbn, coverURL, description, openLibraryKey, genres *string, pages *int) (int64, error) {
 	result, err := DB.Exec(`
-		INSERT INTO books (title, author, isbn, pages, cover_url, description, open_library_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-	`, title, author, isbn, pages, coverURL, description, openLibraryKey)
+		INSERT INTO books (title, author, isbn, pages, cover_url, description, open_library_key, genres)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, title, author, isbn, pages, coverURL, description, openLibraryKey, genres)
 	if err != nil {
 		return 0, err
 	}
@@ -29,7 +29,7 @@ func CreateReadingEntry(bookID int64, status models.BookStatus) error {
 func GetBook(id int64) (*models.BookWithEntry, error) {
 	row := DB.QueryRow(`
 		SELECT
-			b.id, b.title, b.author, b.isbn, b.pages, b.cover_url, b.description, b.open_library_key, b.created_at,
+			b.id, b.title, b.author, b.isbn, b.pages, b.cover_url, b.description, b.open_library_key, b.genres, b.created_at,
 			r.id, r.book_id, r.status, r.started_at, r.finished_at, r.rating, r.review, r.updated_at
 		FROM books b
 		LEFT JOIN reading_entries r ON b.id = r.book_id
@@ -40,7 +40,7 @@ func GetBook(id int64) (*models.BookWithEntry, error) {
 	err := row.Scan(
 		&book.Book.ID, &book.Book.Title, &book.Book.Author, &book.Book.ISBN,
 		&book.Book.Pages, &book.Book.CoverURL, &book.Book.Description,
-		&book.Book.OpenLibraryKey, &book.Book.CreatedAt,
+		&book.Book.OpenLibraryKey, &book.Book.Genres, &book.Book.CreatedAt,
 		&book.ReadingEntry.ID, &book.ReadingEntry.BookID, &book.ReadingEntry.Status,
 		&book.ReadingEntry.StartedAt, &book.ReadingEntry.FinishedAt,
 		&book.ReadingEntry.Rating, &book.ReadingEntry.Review, &book.ReadingEntry.UpdatedAt,
@@ -54,12 +54,12 @@ func GetBook(id int64) (*models.BookWithEntry, error) {
 func ListBooks(statusFilter *models.BookStatus) ([]models.BookWithEntry, error) {
 	query := `
 		SELECT
-			b.id, b.title, b.author, b.isbn, b.pages, b.cover_url, b.description, b.open_library_key, b.created_at,
+			b.id, b.title, b.author, b.isbn, b.pages, b.cover_url, b.description, b.open_library_key, b.genres, b.created_at,
 			r.id, r.book_id, r.status, r.started_at, r.finished_at, r.rating, r.review, r.updated_at
 		FROM books b
 		LEFT JOIN reading_entries r ON b.id = r.book_id
 	`
-	var args []interface{}
+	var args []any
 	if statusFilter != nil {
 		query += " WHERE r.status = ?"
 		args = append(args, *statusFilter)
@@ -78,7 +78,7 @@ func ListBooks(statusFilter *models.BookStatus) ([]models.BookWithEntry, error) 
 		err := rows.Scan(
 			&book.Book.ID, &book.Book.Title, &book.Book.Author, &book.Book.ISBN,
 			&book.Book.Pages, &book.Book.CoverURL, &book.Book.Description,
-			&book.Book.OpenLibraryKey, &book.Book.CreatedAt,
+			&book.Book.OpenLibraryKey, &book.Book.Genres, &book.Book.CreatedAt,
 			&book.ReadingEntry.ID, &book.ReadingEntry.BookID, &book.ReadingEntry.Status,
 			&book.ReadingEntry.StartedAt, &book.ReadingEntry.FinishedAt,
 			&book.ReadingEntry.Rating, &book.ReadingEntry.Review, &book.ReadingEntry.UpdatedAt,

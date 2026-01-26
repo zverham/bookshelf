@@ -47,7 +47,7 @@ func TestGenerateWithBooks(t *testing.T) {
 	defer cleanup()
 
 	// Add a book
-	id, _ := db.AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil)
+	id, _ := db.AddBook("Test Book", "Test Author", nil, nil, nil, nil, nil, nil)
 	db.CreateReadingEntry(id, models.StatusFinished)
 	db.UpdateRating(id, 5)
 	db.UpdateReview(id, "Great book!")
