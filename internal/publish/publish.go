@@ -139,6 +139,25 @@ func templateFuncs() template.FuncMap {
 			}
 			return s[:max-3] + "..."
 		},
+		"initials": func(title string) string {
+			words := strings.Fields(title)
+			if len(words) == 0 {
+				return "?"
+			}
+			if len(words) == 1 {
+				if len(words[0]) >= 2 {
+					return strings.ToUpper(words[0][:2])
+				}
+				return strings.ToUpper(words[0][:1])
+			}
+			return strings.ToUpper(string(words[0][0])) + strings.ToUpper(string(words[1][0]))
+		},
+		"readingDays": func(started, finished time.Time) int {
+			return int(finished.Sub(started).Hours()/24) + 1
+		},
+		"openLibraryURL": func(key string) string {
+			return "https://openlibrary.org" + key
+		},
 	}
 }
 
@@ -148,6 +167,11 @@ const indexTemplate = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Bookshelf</title>
+    <meta name="description" content="My personal reading tracker - {{.Stats.TotalBooks}} books, {{.Stats.Finished}} finished">
+    <meta property="og:title" content="My Bookshelf">
+    <meta property="og:description" content="{{.Stats.TotalBooks}} books tracked, {{.Stats.Finished}} finished, {{.Stats.Reading}} currently reading">
+    <meta property="og:type" content="website">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -174,6 +198,12 @@ const indexTemplate = `<!DOCTYPE html>
                 <span class="stat-number">{{.Stats.WantToRead}}</span>
                 <span class="stat-label">Want to Read</span>
             </div>
+            {{if gt .Stats.BooksThisYear 0}}
+            <div class="stat-card highlight">
+                <span class="stat-number">{{.Stats.BooksThisYear}}</span>
+                <span class="stat-label">This Year</span>
+            </div>
+            {{end}}
             {{if gt .Stats.RatedBooksCount 0}}
             <div class="stat-card">
                 <span class="stat-number">{{printf "%.1f" .Stats.AverageRating}}</span>
@@ -184,16 +214,25 @@ const indexTemplate = `<!DOCTYPE html>
 
         {{if .Books}}
         <section class="books">
-            <h2>All Books</h2>
+            <div class="books-header">
+                <h2>All Books</h2>
+                <div class="filter-tabs">
+                    <button class="filter-btn active" data-filter="all">All</button>
+                    <button class="filter-btn" data-filter="reading">Reading</button>
+                    <button class="filter-btn" data-filter="finished">Finished</button>
+                    <button class="filter-btn" data-filter="wanttoread">Want to Read</button>
+                </div>
+            </div>
             <div class="book-grid">
                 {{range .Books}}
-                <article class="book-card">
-                    <a href="books/{{.Book.ID}}.html">
+                <article class="book-card" data-status="{{statusClass .ReadingEntry.Status}}">
+                    <a href="books/{{.Book.ID}}.html" class="book-cover-link">
                         {{if .Book.CoverURL.Valid}}
-                        <img src="{{.Book.CoverURL.String}}" alt="{{.Book.Title}}" class="book-cover">
+                        <img src="{{.Book.CoverURL.String}}" alt="{{.Book.Title}}" class="book-cover" loading="lazy">
                         {{else}}
                         <div class="book-cover placeholder">
-                            <span>{{truncate .Book.Title 30}}</span>
+                            <span class="initials">{{initials .Book.Title}}</span>
+                            <span class="placeholder-title">{{truncate .Book.Title 40}}</span>
                         </div>
                         {{end}}
                     </a>
@@ -219,6 +258,23 @@ const indexTemplate = `<!DOCTYPE html>
     <footer>
         <p>Generated on {{.GeneratedAt}} with <a href="https://github.com/anthropics/claude-code">Bookshelf CLI</a></p>
     </footer>
+
+    <script>
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const filter = btn.dataset.filter;
+            document.querySelectorAll('.book-card').forEach(card => {
+                if (filter === 'all' || card.dataset.status === filter) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        });
+    });
+    </script>
 </body>
 </html>`
 
@@ -228,6 +284,12 @@ const bookTemplate = `<!DOCTYPE html>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Book.Book.Title}} - My Bookshelf</title>
+    <meta name="description" content="{{.Book.Book.Title}} by {{.Book.Book.Author}} - {{.Book.ReadingEntry.Status}}">
+    <meta property="og:title" content="{{.Book.Book.Title}} - My Bookshelf">
+    <meta property="og:description" content="{{.Book.Book.Title}} by {{.Book.Book.Author}}{{if .Book.ReadingEntry.Rating.Valid}} - Rated {{.Book.ReadingEntry.Rating.Int64}}/5{{end}}">
+    <meta property="og:type" content="book">
+    {{if .Book.Book.CoverURL.Valid}}<meta property="og:image" content="{{.Book.Book.CoverURL.String}}">{{end}}
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
     <link rel="stylesheet" href="../style.css">
 </head>
 <body>
@@ -242,7 +304,7 @@ const bookTemplate = `<!DOCTYPE html>
                 <img src="{{.Book.Book.CoverURL.String}}" alt="{{.Book.Book.Title}}" class="book-cover-large">
                 {{else}}
                 <div class="book-cover-large placeholder">
-                    <span>No Cover</span>
+                    <span class="initials">{{initials .Book.Book.Title}}</span>
                 </div>
                 {{end}}
                 <div class="book-meta">
@@ -277,7 +339,16 @@ const bookTemplate = `<!DOCTYPE html>
                         <dt>Finished</dt>
                         <dd>{{formatDate .Book.ReadingEntry.FinishedAt.Time}}</dd>
                         {{end}}
+
+                        {{if and .Book.ReadingEntry.StartedAt.Valid .Book.ReadingEntry.FinishedAt.Valid}}
+                        <dt>Reading Time</dt>
+                        <dd>{{readingDays .Book.ReadingEntry.StartedAt.Time .Book.ReadingEntry.FinishedAt.Time}} days</dd>
+                        {{end}}
                     </dl>
+
+                    {{if .Book.Book.OpenLibraryKey.Valid}}
+                    <a href="{{openLibraryURL .Book.Book.OpenLibraryKey.String}}" class="external-link" target="_blank" rel="noopener">View on Open Library →</a>
+                    {{end}}
                 </div>
             </div>
 
@@ -305,7 +376,60 @@ const bookTemplate = `<!DOCTYPE html>
 </body>
 </html>`
 
-const cssStyles = `* {
+const cssStyles = `:root {
+    --bg-primary: #f5f5f5;
+    --bg-card: white;
+    --bg-header: #2c3e50;
+    --text-primary: #333;
+    --text-secondary: #666;
+    --text-header: white;
+    --accent: #3498db;
+    --accent-hover: #2980b9;
+    --border: #eee;
+    --shadow: rgba(0,0,0,0.1);
+    --shadow-hover: rgba(0,0,0,0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-primary: #1a1a2e;
+        --bg-card: #16213e;
+        --bg-header: #0f3460;
+        --text-primary: #eee;
+        --text-secondary: #aaa;
+        --text-header: #eee;
+        --accent: #4dabf7;
+        --accent-hover: #74c0fc;
+        --border: #2a2a4a;
+        --shadow: rgba(0,0,0,0.3);
+        --shadow-hover: rgba(0,0,0,0.4);
+    }
+
+    .status.wanttoread {
+        background: #1a3a5c;
+        color: #74c0fc;
+    }
+
+    .status.reading {
+        background: #3d2a1a;
+        color: #ffc078;
+    }
+
+    .status.finished {
+        background: #1a3d2a;
+        color: #69db7c;
+    }
+
+    .review-text {
+        background: #1a1a2e;
+    }
+
+    .empty code {
+        background: #2a2a4a;
+    }
+}
+
+* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
@@ -314,16 +438,16 @@ const cssStyles = `* {
 body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
     line-height: 1.6;
-    color: #333;
-    background: #f5f5f5;
+    color: var(--text-primary);
+    background: var(--bg-primary);
     min-height: 100vh;
     display: flex;
     flex-direction: column;
 }
 
 header {
-    background: #2c3e50;
-    color: white;
+    background: var(--bg-header);
+    color: var(--text-header);
     padding: 2rem;
     text-align: center;
 }
@@ -334,7 +458,7 @@ header h1 {
 }
 
 header h1 a {
-    color: white;
+    color: var(--text-header);
     text-decoration: none;
 }
 
@@ -358,30 +482,77 @@ main {
 }
 
 .stat-card {
-    background: white;
+    background: var(--bg-card);
     padding: 1.5rem;
     border-radius: 8px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px var(--shadow);
     text-align: center;
     flex: 1;
     min-width: 120px;
+}
+
+.stat-card.highlight {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+
+.stat-card.highlight .stat-number,
+.stat-card.highlight .stat-label {
+    color: white;
 }
 
 .stat-number {
     display: block;
     font-size: 2rem;
     font-weight: bold;
-    color: #2c3e50;
+    color: var(--accent);
 }
 
 .stat-label {
     font-size: 0.9rem;
-    color: #666;
+    color: var(--text-secondary);
 }
 
-.books h2 {
+.books-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 1.5rem;
-    color: #2c3e50;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.books-header h2 {
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.filter-tabs {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.filter-btn {
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    border-radius: 20px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: all 0.2s;
+}
+
+.filter-btn:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
+.filter-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
 }
 
 .book-grid {
@@ -391,16 +562,21 @@ main {
 }
 
 .book-card {
-    background: white;
+    background: var(--bg-card);
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px var(--shadow);
     transition: transform 0.2s, box-shadow 0.2s;
 }
 
 .book-card:hover {
     transform: translateY(-4px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 16px var(--shadow-hover);
+}
+
+.book-cover-link {
+    display: block;
+    overflow: hidden;
 }
 
 .book-cover {
@@ -408,17 +584,35 @@ main {
     height: 280px;
     object-fit: cover;
     display: block;
+    transition: transform 0.3s;
+}
+
+.book-card:hover .book-cover {
+    transform: scale(1.05);
 }
 
 .book-cover.placeholder {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 0.9rem;
     padding: 1rem;
     text-align: center;
+    height: 280px;
+}
+
+.book-cover.placeholder .initials {
+    font-size: 3rem;
+    font-weight: bold;
+    opacity: 0.9;
+}
+
+.book-cover.placeholder .placeholder-title {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-top: 0.5rem;
 }
 
 .book-info {
@@ -431,16 +625,16 @@ main {
 }
 
 .book-info h3 a {
-    color: #2c3e50;
+    color: var(--text-primary);
     text-decoration: none;
 }
 
 .book-info h3 a:hover {
-    color: #3498db;
+    color: var(--accent);
 }
 
 .author {
-    color: #666;
+    color: var(--text-secondary);
     font-size: 0.9rem;
     margin-bottom: 0.5rem;
 }
@@ -477,10 +671,10 @@ main {
 
 /* Book detail page */
 .book-detail {
-    background: white;
+    background: var(--bg-card);
     border-radius: 8px;
     padding: 2rem;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 0 2px 4px var(--shadow);
 }
 
 .book-header {
@@ -495,20 +689,27 @@ main {
     object-fit: cover;
     border-radius: 4px;
     flex-shrink: 0;
+    box-shadow: 0 4px 12px var(--shadow);
 }
 
 .book-cover-large.placeholder {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     color: white;
 }
 
+.book-cover-large.placeholder .initials {
+    font-size: 4rem;
+    font-weight: bold;
+}
+
 .book-meta h2 {
     font-size: 1.75rem;
     margin-bottom: 0.5rem;
-    color: #2c3e50;
+    color: var(--text-primary);
 }
 
 .book-meta .author {
@@ -524,11 +725,11 @@ main {
 
 .details dt {
     font-weight: 600;
-    color: #666;
+    color: var(--text-secondary);
 }
 
 .details dd {
-    color: #333;
+    color: var(--text-primary);
 }
 
 .details .rating {
@@ -536,28 +737,45 @@ main {
     margin-left: 0;
 }
 
+.external-link {
+    display: inline-block;
+    margin-top: 1.5rem;
+    color: var(--accent);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.external-link:hover {
+    text-decoration: underline;
+}
+
 .description, .review {
     margin-top: 2rem;
     padding-top: 2rem;
-    border-top: 1px solid #eee;
+    border-top: 1px solid var(--border);
 }
 
 .description h3, .review h3 {
     margin-bottom: 1rem;
-    color: #2c3e50;
+    color: var(--text-primary);
+}
+
+.description p {
+    color: var(--text-secondary);
+    line-height: 1.8;
 }
 
 .review-text {
-    background: #f9f9f9;
+    background: var(--bg-primary);
     padding: 1rem;
     border-radius: 4px;
-    border-left: 4px solid #3498db;
+    border-left: 4px solid var(--accent);
 }
 
 .back-link {
     display: inline-block;
     margin-top: 2rem;
-    color: #3498db;
+    color: var(--accent);
     text-decoration: none;
 }
 
@@ -568,12 +786,12 @@ main {
 .empty {
     text-align: center;
     padding: 4rem 2rem;
-    background: white;
+    background: var(--bg-card);
     border-radius: 8px;
 }
 
 .empty code {
-    background: #f0f0f0;
+    background: var(--bg-primary);
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
 }
@@ -581,12 +799,12 @@ main {
 footer {
     text-align: center;
     padding: 2rem;
-    color: #666;
+    color: var(--text-secondary);
     font-size: 0.9rem;
 }
 
 footer a {
-    color: #3498db;
+    color: var(--accent);
 }
 
 @media (max-width: 600px) {
@@ -602,6 +820,58 @@ footer a {
 
     .stats {
         justify-content: center;
+    }
+
+    .books-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .filter-tabs {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+
+@media print {
+    header {
+        background: none;
+        color: black;
+        padding: 1rem 0;
+    }
+
+    .filter-tabs, .back-link, .external-link, footer {
+        display: none;
+    }
+
+    .book-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+
+    .book-detail {
+        box-shadow: none;
+    }
+
+    .stats {
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 1rem;
+    }
+
+    .stat-card {
+        box-shadow: none;
+        border: 1px solid #ddd;
+    }
+
+    .stat-card.highlight {
+        background: #f0f0f0;
+        color: black;
+    }
+
+    .stat-card.highlight .stat-number,
+    .stat-card.highlight .stat-label {
+        color: black;
     }
 }
 `
