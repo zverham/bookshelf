@@ -76,6 +76,15 @@ bookshelf remove <id>      # Remove a book (prompts for confirmation)
 bookshelf remove <id> -f   # Remove without confirmation
 ```
 
+### Refreshing Book Metadata
+
+Back-fill missing metadata (genres, descriptions) from Open Library:
+
+```bash
+bookshelf refresh          # Refresh all books
+bookshelf refresh <id>     # Refresh a specific book
+```
+
 ### Statistics
 
 View your reading stats:

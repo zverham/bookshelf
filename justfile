@@ -64,6 +64,14 @@ remove id:
 remove-force id:
     go run . remove {{id}} --force
 
+# Refresh metadata for all books
+refresh:
+    go run . refresh
+
+# Refresh metadata for a specific book
+refresh-book id:
+    go run . refresh {{id}}
+
 # Show reading statistics
 stats:
     go run . stats

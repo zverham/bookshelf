@@ -204,3 +204,49 @@ func DeleteBook(bookID int64) error {
 	_, err = DB.Exec(`DELETE FROM books WHERE id = ?`, bookID)
 	return err
 }
+
+// UpdateBookMetadata updates optional fields that may have been missing when the book was added.
+func UpdateBookMetadata(bookID int64, description, genres *string) error {
+	_, err := DB.Exec(`
+		UPDATE books
+		SET description = COALESCE(?, description),
+		    genres = COALESCE(?, genres)
+		WHERE id = ?
+	`, description, genres, bookID)
+	return err
+}
+
+// GetBooksWithOpenLibraryKey returns all books that have an Open Library key for refreshing metadata.
+func GetBooksWithOpenLibraryKey() ([]models.BookWithEntry, error) {
+	rows, err := DB.Query(`
+		SELECT
+			b.id, b.title, b.author, b.isbn, b.pages, b.cover_url, b.description, b.open_library_key, b.genres, b.created_at,
+			r.id, r.book_id, r.status, r.started_at, r.finished_at, r.rating, r.review, r.updated_at
+		FROM books b
+		LEFT JOIN reading_entries r ON b.id = r.book_id
+		WHERE b.open_library_key IS NOT NULL AND b.open_library_key != ''
+		ORDER BY b.id
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var books []models.BookWithEntry
+	for rows.Next() {
+		var book models.BookWithEntry
+		err := rows.Scan(
+			&book.Book.ID, &book.Book.Title, &book.Book.Author, &book.Book.ISBN,
+			&book.Book.Pages, &book.Book.CoverURL, &book.Book.Description,
+			&book.Book.OpenLibraryKey, &book.Book.Genres, &book.Book.CreatedAt,
+			&book.ReadingEntry.ID, &book.ReadingEntry.BookID, &book.ReadingEntry.Status,
+			&book.ReadingEntry.StartedAt, &book.ReadingEntry.FinishedAt,
+			&book.ReadingEntry.Rating, &book.ReadingEntry.Review, &book.ReadingEntry.UpdatedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		books = append(books, book)
+	}
+	return books, nil
+}

@@ -39,4 +39,5 @@ func init() {
 	rootCmd.AddCommand(searchCmd)
 	rootCmd.AddCommand(publishCmd)
 	rootCmd.AddCommand(removeCmd)
+	rootCmd.AddCommand(refreshCmd)
 }
