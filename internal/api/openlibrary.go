@@ -24,18 +24,18 @@ func NewClient() *Client {
 }
 
 type SearchResult struct {
-	NumFound int          `json:"numFound"`
-	Docs     []SearchDoc  `json:"docs"`
+	NumFound int         `json:"numFound"`
+	Docs     []SearchDoc `json:"docs"`
 }
 
 type SearchDoc struct {
-	Key           string   `json:"key"`
-	Title         string   `json:"title"`
-	AuthorName    []string `json:"author_name"`
-	FirstPublishYear int  `json:"first_publish_year"`
-	ISBN          []string `json:"isbn"`
-	NumberOfPages int      `json:"number_of_pages_median"`
-	CoverI        int      `json:"cover_i"`
+	Key              string   `json:"key"`
+	Title            string   `json:"title"`
+	AuthorName       []string `json:"author_name"`
+	FirstPublishYear int      `json:"first_publish_year"`
+	ISBN             []string `json:"isbn"`
+	NumberOfPages    int      `json:"number_of_pages_median"`
+	CoverI           int      `json:"cover_i"`
 }
 
 func (d *SearchDoc) Author() string {
@@ -90,8 +90,8 @@ func (c *Client) Search(query string, limit int) ([]SearchDoc, error) {
 }
 
 type WorkDetails struct {
-	Key         string `json:"key"`
-	Title       string `json:"title"`
+	Key         string      `json:"key"`
+	Title       string      `json:"title"`
 	Description interface{} `json:"description"`
 }
 

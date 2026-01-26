@@ -25,7 +25,7 @@ func setupTestDB(t *testing.T) func() {
 		t.Fatalf("failed to open database: %v", dbErr)
 	}
 
-	if err := migrate(); err != nil {
+	if err := Migrate(); err != nil {
 		DB.Close()
 		os.RemoveAll(tmpDir)
 		t.Fatalf("failed to migrate: %v", err)

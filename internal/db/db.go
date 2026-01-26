@@ -11,26 +11,32 @@ import (
 var DB *sql.DB
 
 func Init() error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
+	dbPath := os.Getenv("BOOKSHELF_DB_PATH")
+	if dbPath == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+
+		dbDir := filepath.Join(homeDir, ".bookshelf")
+		if err := os.MkdirAll(dbDir, 0755); err != nil {
+			return err
+		}
+
+		dbPath = filepath.Join(dbDir, "bookshelf.db")
 	}
 
-	dbDir := filepath.Join(homeDir, ".bookshelf")
-	if err := os.MkdirAll(dbDir, 0755); err != nil {
-		return err
-	}
-
-	dbPath := filepath.Join(dbDir, "bookshelf.db")
+	var err error
 	DB, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}
 
-	return migrate()
+	return Migrate()
 }
 
-func migrate() error {
+// Migrate creates the database schema. Exported for use by test helpers.
+func Migrate() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS books (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,

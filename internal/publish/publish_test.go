@@ -3,68 +3,15 @@ package publish
 import (
 	"bookshelf/internal/db"
 	"bookshelf/internal/models"
-	"database/sql"
+	"bookshelf/internal/testutil"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func setupTestDB(t *testing.T) func() {
-	t.Helper()
-
-	tmpDir, err := os.MkdirTemp("", "bookshelf-publish-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-
-	dbPath := filepath.Join(tmpDir, "test.db")
-	var dbErr error
-	db.DB, dbErr = sql.Open("sqlite", dbPath)
-	if dbErr != nil {
-		os.RemoveAll(tmpDir)
-		t.Fatalf("failed to open database: %v", dbErr)
-	}
-
-	// Run migrations manually
-	schema := `
-	CREATE TABLE IF NOT EXISTS books (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		title TEXT NOT NULL,
-		author TEXT NOT NULL,
-		isbn TEXT,
-		pages INTEGER,
-		cover_url TEXT,
-		description TEXT,
-		open_library_key TEXT,
-		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
-	CREATE TABLE IF NOT EXISTS reading_entries (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		book_id INTEGER NOT NULL,
-		status TEXT NOT NULL DEFAULT 'want-to-read',
-		started_at DATETIME,
-		finished_at DATETIME,
-		rating INTEGER CHECK(rating >= 1 AND rating <= 5),
-		review TEXT,
-		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-		FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
-	);
-	`
-	if _, err := db.DB.Exec(schema); err != nil {
-		db.DB.Close()
-		os.RemoveAll(tmpDir)
-		t.Fatalf("failed to migrate: %v", err)
-	}
-
-	return func() {
-		db.DB.Close()
-		os.RemoveAll(tmpDir)
-	}
-}
-
 func TestGenerateEmptySite(t *testing.T) {
-	cleanup := setupTestDB(t)
+	cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
 	outputDir, err := os.MkdirTemp("", "bookshelf-output-*")
@@ -96,7 +43,7 @@ func TestGenerateEmptySite(t *testing.T) {
 }
 
 func TestGenerateWithBooks(t *testing.T) {
-	cleanup := setupTestDB(t)
+	cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
 	// Add a book
@@ -201,7 +148,7 @@ func TestTemplateFuncsTruncate(t *testing.T) {
 }
 
 func TestGenerateInvalidOutputDir(t *testing.T) {
-	cleanup := setupTestDB(t)
+	cleanup := testutil.SetupTestDB(t)
 	defer cleanup()
 
 	// Try to generate to an invalid path

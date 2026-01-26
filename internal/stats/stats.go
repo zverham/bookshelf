@@ -38,7 +38,7 @@ func PrintStats() error {
 
 func renderStars(rating float64) string {
 	fullStars := int(rating)
-	halfStar := rating - float64(fullStars) >= 0.5
+	halfStar := rating-float64(fullStars) >= 0.5
 
 	var stars strings.Builder
 	for i := 0; i < fullStars; i++ {

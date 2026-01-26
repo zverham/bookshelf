@@ -129,14 +129,14 @@ func UpdateReview(bookID int64, review string) error {
 }
 
 type Stats struct {
-	TotalBooks       int
-	WantToRead       int
-	Reading          int
-	Finished         int
-	BooksThisYear    int
-	PagesThisYear    int
-	AverageRating    float64
-	RatedBooksCount  int
+	TotalBooks      int
+	WantToRead      int
+	Reading         int
+	Finished        int
+	BooksThisYear   int
+	PagesThisYear   int
+	AverageRating   float64
+	RatedBooksCount int
 }
 
 func GetStats() (*Stats, error) {

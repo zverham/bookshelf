@@ -65,9 +65,9 @@ func TestSearchDocFirstISBN(t *testing.T) {
 
 func TestSearchDocCoverURL(t *testing.T) {
 	tests := []struct {
-		name     string
-		coverI   int
-		hasURL   bool
+		name   string
+		coverI int
+		hasURL bool
 	}{
 		{"with cover", 12345, true},
 		{"no cover", 0, false},
