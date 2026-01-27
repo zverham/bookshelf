@@ -12,35 +12,59 @@ import (
 )
 
 var listStatus string
+var listSearch string
+var listSort string
 
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all books",
-	Long:  `List all books in your collection. Use --status to filter by reading status.`,
+	Long:  `List all books in your collection. Use --status to filter by reading status, --search to find books, and --sort to change ordering.`,
 	RunE:  runList,
 }
 
 func init() {
 	listCmd.Flags().StringVarP(&listStatus, "status", "s", "", "Filter by status (want-to-read, reading, finished)")
+	listCmd.Flags().StringVarP(&listSearch, "search", "q", "", "Search by title or author")
+	listCmd.Flags().StringVarP(&listSort, "sort", "o", "added", "Sort by: added, title, author, rating")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	var statusFilter *models.BookStatus
+	opts := models.ListOptions{}
+
 	if listStatus != "" {
 		status := models.BookStatus(listStatus)
 		if status != models.StatusWantToRead && status != models.StatusReading && status != models.StatusFinished {
 			return fmt.Errorf("invalid status: %s (use: want-to-read, reading, finished)", listStatus)
 		}
-		statusFilter = &status
+		opts.StatusFilter = &status
 	}
 
-	books, err := db.ListBooks(statusFilter)
+	opts.SearchQuery = listSearch
+
+	switch listSort {
+	case "added", "":
+		opts.SortBy = models.SortByAdded
+	case "title":
+		opts.SortBy = models.SortByTitle
+	case "author":
+		opts.SortBy = models.SortByAuthor
+	case "rating":
+		opts.SortBy = models.SortByRating
+	default:
+		return fmt.Errorf("invalid sort option: %s (use: added, title, author, rating)", listSort)
+	}
+
+	books, err := db.ListBooks(opts)
 	if err != nil {
 		return fmt.Errorf("failed to list books: %w", err)
 	}
 
 	if len(books) == 0 {
-		fmt.Println("No books found. Use 'bookshelf add' to add some books.")
+		if listSearch != "" {
+			fmt.Printf("No books found matching '%s'.\n", listSearch)
+		} else {
+			fmt.Println("No books found. Use 'bookshelf add' to add some books.")
+		}
 		return nil
 	}
 

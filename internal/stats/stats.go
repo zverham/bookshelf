@@ -4,6 +4,7 @@ import (
 	"bookshelf/internal/db"
 	"fmt"
 	"strings"
+	"time"
 )
 
 func PrintStats() error {
@@ -24,6 +25,19 @@ func PrintStats() error {
 
 	fmt.Println("This Year:")
 	fmt.Printf("  Books finished: %d\n", stats.BooksThisYear)
+
+	// Show goal progress if a goal is set for current year
+	currentYear := time.Now().Year()
+	goal, err := db.GetGoal(currentYear)
+	if err == nil && goal != nil {
+		percentage := float64(stats.BooksThisYear) / float64(goal.Target) * 100
+		if percentage > 100 {
+			percentage = 100
+		}
+		fmt.Printf("  Goal progress:  %d/%d (%.0f%%)\n", stats.BooksThisYear, goal.Target, percentage)
+		fmt.Printf("  %s\n", RenderProgressBar(stats.BooksThisYear, goal.Target, 20))
+	}
+
 	fmt.Printf("  Pages read:     %d\n", stats.PagesThisYear)
 	fmt.Println()
 
@@ -51,4 +65,18 @@ func renderStars(rating float64) string {
 		stars.WriteString(".")
 	}
 	return stars.String()
+}
+
+// RenderProgressBar renders a text-based progress bar.
+func RenderProgressBar(current, total, width int) string {
+	if total <= 0 {
+		return "[" + strings.Repeat("-", width) + "]"
+	}
+
+	filled := (current * width) / total
+	if filled > width {
+		filled = width
+	}
+
+	return "[" + strings.Repeat("#", filled) + strings.Repeat("-", width-filled) + "]"
 }

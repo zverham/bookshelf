@@ -91,3 +91,48 @@ func TestRenderStars(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderProgressBar(t *testing.T) {
+	tests := []struct {
+		current  int
+		total    int
+		width    int
+		expected string
+	}{
+		{0, 10, 10, "[----------]"},
+		{5, 10, 10, "[#####-----]"},
+		{10, 10, 10, "[##########]"},
+		{15, 10, 10, "[##########]"}, // Over 100%
+		{0, 0, 10, "[----------]"},  // Edge case: zero total
+		{8, 24, 20, "[######--------------]"},
+	}
+
+	for _, tt := range tests {
+		result := RenderProgressBar(tt.current, tt.total, tt.width)
+		if result != tt.expected {
+			t.Errorf("RenderProgressBar(%d, %d, %d) = %s, expected %s", tt.current, tt.total, tt.width, result, tt.expected)
+		}
+	}
+}
+
+func TestPrintStatsWithGoal(t *testing.T) {
+	cleanup := testutil.SetupTestDB(t)
+	defer cleanup()
+
+	// Set a goal for the current year
+	// Note: we can't easily test current year goal display without mocking time
+	// So we just test that the function doesn't error with a goal set
+	db.SetGoal(2026, 24)
+
+	output := testutil.CaptureOutput(t, func() {
+		err := PrintStats()
+		if err != nil {
+			t.Fatalf("PrintStats failed: %v", err)
+		}
+	})
+
+	// Stats should still display (goal display depends on current year matching)
+	if !strings.Contains(output, "Reading Statistics") {
+		t.Error("expected 'Reading Statistics' in output")
+	}
+}

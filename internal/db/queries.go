@@ -4,6 +4,7 @@ import (
 	"bookshelf/internal/models"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -51,7 +52,7 @@ func GetBook(id int64) (*models.BookWithEntry, error) {
 	return &book, nil
 }
 
-func ListBooks(statusFilter *models.BookStatus) ([]models.BookWithEntry, error) {
+func ListBooks(opts models.ListOptions) ([]models.BookWithEntry, error) {
 	query := `
 		SELECT
 			b.id, b.title, b.author, b.isbn, b.pages, b.cover_url, b.description, b.open_library_key, b.genres, b.created_at,
@@ -60,11 +61,34 @@ func ListBooks(statusFilter *models.BookStatus) ([]models.BookWithEntry, error) 
 		LEFT JOIN reading_entries r ON b.id = r.book_id
 	`
 	var args []any
-	if statusFilter != nil {
-		query += " WHERE r.status = ?"
-		args = append(args, *statusFilter)
+	var conditions []string
+
+	if opts.StatusFilter != nil {
+		conditions = append(conditions, "r.status = ?")
+		args = append(args, *opts.StatusFilter)
 	}
-	query += " ORDER BY b.created_at DESC"
+
+	if opts.SearchQuery != "" {
+		conditions = append(conditions, "(LOWER(b.title) LIKE ? OR LOWER(b.author) LIKE ?)")
+		searchPattern := "%" + strings.ToLower(opts.SearchQuery) + "%"
+		args = append(args, searchPattern, searchPattern)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	// Apply sorting
+	switch opts.SortBy {
+	case models.SortByTitle:
+		query += " ORDER BY LOWER(b.title) ASC"
+	case models.SortByAuthor:
+		query += " ORDER BY LOWER(b.author) ASC"
+	case models.SortByRating:
+		query += " ORDER BY r.rating DESC NULLS LAST, b.created_at DESC"
+	default: // SortByAdded or empty
+		query += " ORDER BY b.created_at DESC"
+	}
 
 	rows, err := DB.Query(query, args...)
 	if err != nil {
@@ -249,4 +273,170 @@ func GetBooksWithOpenLibraryKey() ([]models.BookWithEntry, error) {
 		books = append(books, book)
 	}
 	return books, nil
+}
+
+// SetGoal creates or updates a reading goal for a given year (UPSERT).
+func SetGoal(year, target int) error {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	_, err := DB.Exec(`
+		INSERT INTO reading_goals (year, target, created_at, updated_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(year) DO UPDATE SET target = excluded.target, updated_at = excluded.updated_at
+	`, year, target, now, now)
+	return err
+}
+
+// GetGoal retrieves a reading goal for a specific year. Returns nil if not found.
+func GetGoal(year int) (*models.ReadingGoal, error) {
+	row := DB.QueryRow(`
+		SELECT id, year, target, created_at, updated_at
+		FROM reading_goals
+		WHERE year = ?
+	`, year)
+
+	var goal models.ReadingGoal
+	err := row.Scan(&goal.ID, &goal.Year, &goal.Target, &goal.CreatedAt, &goal.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &goal, nil
+}
+
+// GetAllGoals retrieves all reading goals ordered by year descending.
+func GetAllGoals() ([]models.ReadingGoal, error) {
+	rows, err := DB.Query(`
+		SELECT id, year, target, created_at, updated_at
+		FROM reading_goals
+		ORDER BY year DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var goals []models.ReadingGoal
+	for rows.Next() {
+		var goal models.ReadingGoal
+		err := rows.Scan(&goal.ID, &goal.Year, &goal.Target, &goal.CreatedAt, &goal.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		goals = append(goals, goal)
+	}
+	return goals, nil
+}
+
+// ClearGoal deletes a reading goal for a specific year.
+func ClearGoal(year int) error {
+	result, err := DB.Exec(`DELETE FROM reading_goals WHERE year = ?`, year)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("no goal found for year %d", year)
+	}
+	return nil
+}
+
+// GetBooksFinishedInYear returns the count of books finished in a given year.
+func GetBooksFinishedInYear(year int) (int, error) {
+	var count int
+	err := DB.QueryRow(`
+		SELECT COUNT(*) FROM reading_entries
+		WHERE status = 'finished' AND strftime('%Y', finished_at) = ?
+	`, fmt.Sprintf("%d", year)).Scan(&count)
+	return count, err
+}
+
+// Site configuration functions
+
+// SetConfig sets a configuration value.
+func SetConfig(key, value string) error {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	_, err := DB.Exec(`
+		INSERT INTO site_config (key, value, updated_at)
+		VALUES (?, ?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+	`, key, value, now)
+	return err
+}
+
+// GetConfig retrieves a configuration value. Returns empty string if not found.
+func GetConfig(key string) (string, error) {
+	var value string
+	err := DB.QueryRow(`SELECT value FROM site_config WHERE key = ?`, key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	return value, err
+}
+
+// GetAllConfig retrieves all configuration values as a map.
+func GetAllConfig() (map[string]string, error) {
+	rows, err := DB.Query(`SELECT key, value FROM site_config ORDER BY key`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	config := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		config[key] = value
+	}
+	return config, nil
+}
+
+// DeleteConfig removes a configuration value.
+func DeleteConfig(key string) error {
+	result, err := DB.Exec(`DELETE FROM site_config WHERE key = ?`, key)
+	if err != nil {
+		return err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("config key '%s' not found", key)
+	}
+	return nil
+}
+
+// GetSiteConfig retrieves the full site configuration with defaults.
+func GetSiteConfig() (models.SiteConfig, error) {
+	config := models.DefaultSiteConfig()
+
+	allConfig, err := GetAllConfig()
+	if err != nil {
+		return config, err
+	}
+
+	if v, ok := allConfig["site.title"]; ok && v != "" {
+		config.Title = v
+	}
+	if v, ok := allConfig["site.subtitle"]; ok && v != "" {
+		config.Subtitle = v
+	}
+	if v, ok := allConfig["site.author"]; ok && v != "" {
+		config.Author = v
+	}
+	if v, ok := allConfig["site.description"]; ok && v != "" {
+		config.Description = v
+	}
+	if v, ok := allConfig["site.base_url"]; ok && v != "" {
+		config.BaseURL = v
+	}
+
+	return config, nil
 }

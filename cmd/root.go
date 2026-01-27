@@ -40,4 +40,6 @@ func init() {
 	rootCmd.AddCommand(publishCmd)
 	rootCmd.AddCommand(removeCmd)
 	rootCmd.AddCommand(refreshCmd)
+	rootCmd.AddCommand(goalCmd)
+	rootCmd.AddCommand(configCmd)
 }

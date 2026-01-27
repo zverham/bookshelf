@@ -65,6 +65,21 @@ func Migrate() error {
 
 	CREATE INDEX IF NOT EXISTS idx_reading_entries_book_id ON reading_entries(book_id);
 	CREATE INDEX IF NOT EXISTS idx_reading_entries_status ON reading_entries(status);
+
+	CREATE TABLE IF NOT EXISTS reading_goals (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		year INTEGER NOT NULL UNIQUE,
+		target INTEGER NOT NULL CHECK(target > 0),
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	CREATE INDEX IF NOT EXISTS idx_reading_goals_year ON reading_goals(year);
+
+	CREATE TABLE IF NOT EXISTS site_config (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
 	`
 
 	if _, err := DB.Exec(schema); err != nil {

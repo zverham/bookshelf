@@ -15,11 +15,13 @@ import (
 type SiteData struct {
 	Books       []models.BookWithEntry
 	Stats       *db.Stats
+	Config      models.SiteConfig
 	GeneratedAt string
 }
 
 type BookPageData struct {
 	Book        models.BookWithEntry
+	Config      models.SiteConfig
 	GeneratedAt string
 }
 
@@ -30,7 +32,7 @@ func Generate(outputDir string) error {
 	}
 
 	// Fetch all data
-	books, err := db.ListBooks(nil)
+	books, err := db.ListBooks(models.ListOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to fetch books: %w", err)
 	}
@@ -40,12 +42,18 @@ func Generate(outputDir string) error {
 		return fmt.Errorf("failed to fetch stats: %w", err)
 	}
 
+	config, err := db.GetSiteConfig()
+	if err != nil {
+		return fmt.Errorf("failed to fetch site config: %w", err)
+	}
+
 	generatedAt := time.Now().Format("January 2, 2006")
 
 	// Generate index page
 	siteData := SiteData{
 		Books:       books,
 		Stats:       stats,
+		Config:      config,
 		GeneratedAt: generatedAt,
 	}
 
@@ -60,7 +68,7 @@ func Generate(outputDir string) error {
 	}
 
 	for _, book := range books {
-		if err := generateBookPage(booksDir, book, generatedAt); err != nil {
+		if err := generateBookPage(booksDir, book, config, generatedAt); err != nil {
 			return err
 		}
 	}
@@ -93,7 +101,7 @@ func generateIndex(outputDir string, data SiteData) error {
 	return tmpl.Execute(f, data)
 }
 
-func generateBookPage(booksDir string, book models.BookWithEntry, generatedAt string) error {
+func generateBookPage(booksDir string, book models.BookWithEntry, config models.SiteConfig, generatedAt string) error {
 	tmpl, err := template.New("book").Funcs(templateFuncs()).Parse(bookTemplate)
 	if err != nil {
 		return fmt.Errorf("failed to parse book template: %w", err)
@@ -106,7 +114,7 @@ func generateBookPage(booksDir string, book models.BookWithEntry, generatedAt st
 	}
 	defer f.Close()
 
-	return tmpl.Execute(f, BookPageData{Book: book, GeneratedAt: generatedAt})
+	return tmpl.Execute(f, BookPageData{Book: book, Config: config, GeneratedAt: generatedAt})
 }
 
 func generateCSS(outputDir string) error {
@@ -177,18 +185,19 @@ const indexTemplate = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Bookshelf</title>
-    <meta name="description" content="My personal reading tracker - {{.Stats.TotalBooks}} books, {{.Stats.Finished}} finished">
-    <meta property="og:title" content="My Bookshelf">
+    <title>{{.Config.Title}}</title>
+    <meta name="description" content="{{if .Config.Description}}{{.Config.Description}}{{else}}{{.Config.Title}} - {{.Stats.TotalBooks}} books, {{.Stats.Finished}} finished{{end}}">
+    <meta property="og:title" content="{{.Config.Title}}">
     <meta property="og:description" content="{{.Stats.TotalBooks}} books tracked, {{.Stats.Finished}} finished, {{.Stats.Reading}} currently reading">
     <meta property="og:type" content="website">
+    {{if .Config.BaseURL}}<link rel="canonical" href="{{.Config.BaseURL}}">{{end}}
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>My Bookshelf</h1>
-        <p class="subtitle">Personal Reading Tracker</p>
+        <h1>{{.Config.Title}}</h1>
+        <p class="subtitle">{{.Config.Subtitle}}</p>
     </header>
 
     <main>
@@ -274,7 +283,7 @@ const indexTemplate = `<!DOCTYPE html>
     </main>
 
     <footer>
-        <p>Generated on {{.GeneratedAt}} with <a href="https://github.com/anthropics/claude-code">Bookshelf CLI</a></p>
+        <p>{{if .Config.Author}}{{.Config.Author}}'s bookshelf. {{end}}Generated on {{.GeneratedAt}} with <a href="https://github.com/anthropics/claude-code">Bookshelf CLI</a></p>
     </footer>
 
     <script>
@@ -301,18 +310,19 @@ const bookTemplate = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{.Book.Book.Title}} - My Bookshelf</title>
+    <title>{{.Book.Book.Title}} - {{.Config.Title}}</title>
     <meta name="description" content="{{.Book.Book.Title}} by {{.Book.Book.Author}} - {{.Book.ReadingEntry.Status}}">
-    <meta property="og:title" content="{{.Book.Book.Title}} - My Bookshelf">
+    <meta property="og:title" content="{{.Book.Book.Title}} - {{.Config.Title}}">
     <meta property="og:description" content="{{.Book.Book.Title}} by {{.Book.Book.Author}}{{if .Book.ReadingEntry.Rating.Valid}} - Rated {{.Book.ReadingEntry.Rating.Int64}}/5{{end}}">
     <meta property="og:type" content="book">
     {{if .Book.Book.CoverURL.Valid}}<meta property="og:image" content="{{.Book.Book.CoverURL.String}}">{{end}}
+    {{if .Config.BaseURL}}<link rel="canonical" href="{{.Config.BaseURL}}/books/{{.Book.Book.ID}}.html">{{end}}
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📚</text></svg>">
     <link rel="stylesheet" href="../style.css">
 </head>
 <body>
     <header>
-        <h1><a href="../index.html">My Bookshelf</a></h1>
+        <h1><a href="../index.html">{{.Config.Title}}</a></h1>
     </header>
 
     <main>
@@ -398,7 +408,7 @@ const bookTemplate = `<!DOCTYPE html>
     </main>
 
     <footer>
-        <p>Generated on {{.GeneratedAt}} with <a href="https://github.com/anthropics/claude-code">Bookshelf CLI</a></p>
+        <p>{{if .Config.Author}}{{.Config.Author}}'s bookshelf. {{end}}Generated on {{.GeneratedAt}} with <a href="https://github.com/anthropics/claude-code">Bookshelf CLI</a></p>
     </footer>
 </body>
 </html>`

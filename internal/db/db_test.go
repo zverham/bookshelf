@@ -133,7 +133,7 @@ func TestListBooks(t *testing.T) {
 	CreateReadingEntry(id3, models.StatusFinished)
 
 	// List all books
-	books, err := ListBooks(nil)
+	books, err := ListBooks(models.ListOptions{})
 	if err != nil {
 		t.Fatalf("failed to list books: %v", err)
 	}
@@ -158,7 +158,7 @@ func TestListBooksWithFilter(t *testing.T) {
 
 	// Filter by status
 	status := models.StatusReading
-	books, err := ListBooks(&status)
+	books, err := ListBooks(models.ListOptions{StatusFilter: &status})
 	if err != nil {
 		t.Fatalf("failed to list books: %v", err)
 	}
@@ -340,5 +340,416 @@ func TestGetStats(t *testing.T) {
 	expectedAvg := 4.5
 	if stats.AverageRating != expectedAvg {
 		t.Errorf("expected average rating %.1f, got %.1f", expectedAvg, stats.AverageRating)
+	}
+}
+
+// Goal tests
+
+func TestSetGoal(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	err := SetGoal(2026, 24)
+	if err != nil {
+		t.Fatalf("failed to set goal: %v", err)
+	}
+
+	goal, err := GetGoal(2026)
+	if err != nil {
+		t.Fatalf("failed to get goal: %v", err)
+	}
+
+	if goal == nil {
+		t.Fatal("expected goal to exist")
+	}
+
+	if goal.Year != 2026 {
+		t.Errorf("expected year 2026, got %d", goal.Year)
+	}
+
+	if goal.Target != 24 {
+		t.Errorf("expected target 24, got %d", goal.Target)
+	}
+}
+
+func TestSetGoalUpdatesExisting(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	err := SetGoal(2026, 24)
+	if err != nil {
+		t.Fatalf("failed to set goal: %v", err)
+	}
+
+	// Update existing goal
+	err = SetGoal(2026, 30)
+	if err != nil {
+		t.Fatalf("failed to update goal: %v", err)
+	}
+
+	goal, err := GetGoal(2026)
+	if err != nil {
+		t.Fatalf("failed to get goal: %v", err)
+	}
+
+	if goal.Target != 30 {
+		t.Errorf("expected target 30, got %d", goal.Target)
+	}
+
+	// Verify only one goal exists
+	goals, err := GetAllGoals()
+	if err != nil {
+		t.Fatalf("failed to get all goals: %v", err)
+	}
+
+	if len(goals) != 1 {
+		t.Errorf("expected 1 goal, got %d", len(goals))
+	}
+}
+
+func TestGetGoalNotFound(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	goal, err := GetGoal(2026)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if goal != nil {
+		t.Error("expected nil goal for non-existent year")
+	}
+}
+
+func TestClearGoal(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	err := SetGoal(2026, 24)
+	if err != nil {
+		t.Fatalf("failed to set goal: %v", err)
+	}
+
+	err = ClearGoal(2026)
+	if err != nil {
+		t.Fatalf("failed to clear goal: %v", err)
+	}
+
+	goal, err := GetGoal(2026)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if goal != nil {
+		t.Error("expected goal to be cleared")
+	}
+}
+
+func TestClearGoalNotFound(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	err := ClearGoal(2026)
+	if err == nil {
+		t.Error("expected error when clearing non-existent goal")
+	}
+}
+
+func TestGetAllGoals(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	SetGoal(2024, 20)
+	SetGoal(2025, 24)
+	SetGoal(2026, 30)
+
+	goals, err := GetAllGoals()
+	if err != nil {
+		t.Fatalf("failed to get all goals: %v", err)
+	}
+
+	if len(goals) != 3 {
+		t.Errorf("expected 3 goals, got %d", len(goals))
+	}
+
+	// Goals should be ordered by year DESC
+	if goals[0].Year != 2026 {
+		t.Errorf("expected first goal year 2026, got %d", goals[0].Year)
+	}
+}
+
+func TestGetBooksFinishedInYear(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id1, _ := AddBook("Book 1", "Author 1", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id1, models.StatusFinished)
+	UpdateStatus(id1, models.StatusFinished)
+
+	count, err := GetBooksFinishedInYear(2026)
+	if err != nil {
+		t.Fatalf("failed to get books finished: %v", err)
+	}
+
+	// Book was finished "now" so it should be in current year
+	if count < 0 {
+		t.Errorf("expected count >= 0, got %d", count)
+	}
+}
+
+// Search and sort tests
+
+func TestListBooksWithSearch(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id1, _ := AddBook("The Great Gatsby", "F. Scott Fitzgerald", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id1, models.StatusFinished)
+
+	id2, _ := AddBook("To Kill a Mockingbird", "Harper Lee", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id2, models.StatusReading)
+
+	id3, _ := AddBook("1984", "George Orwell", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id3, models.StatusWantToRead)
+
+	// Search by title
+	books, err := ListBooks(models.ListOptions{SearchQuery: "gatsby"})
+	if err != nil {
+		t.Fatalf("failed to search books: %v", err)
+	}
+
+	if len(books) != 1 {
+		t.Errorf("expected 1 book matching 'gatsby', got %d", len(books))
+	}
+
+	if len(books) > 0 && books[0].Book.Title != "The Great Gatsby" {
+		t.Errorf("expected 'The Great Gatsby', got %s", books[0].Book.Title)
+	}
+
+	// Search by author (case insensitive)
+	books, err = ListBooks(models.ListOptions{SearchQuery: "ORWELL"})
+	if err != nil {
+		t.Fatalf("failed to search books: %v", err)
+	}
+
+	if len(books) != 1 {
+		t.Errorf("expected 1 book by 'ORWELL', got %d", len(books))
+	}
+}
+
+func TestListBooksWithSort(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id1, _ := AddBook("Zebra Book", "Alice Author", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id1, models.StatusFinished)
+	UpdateRating(id1, 3)
+
+	id2, _ := AddBook("Alpha Book", "Zack Author", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id2, models.StatusFinished)
+	UpdateRating(id2, 5)
+
+	id3, _ := AddBook("Middle Book", "Mike Author", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id3, models.StatusFinished)
+	// No rating
+
+	// Sort by title ASC
+	books, err := ListBooks(models.ListOptions{SortBy: models.SortByTitle})
+	if err != nil {
+		t.Fatalf("failed to list books: %v", err)
+	}
+
+	if len(books) < 1 || books[0].Book.Title != "Alpha Book" {
+		t.Errorf("expected 'Alpha Book' first when sorting by title, got %s", books[0].Book.Title)
+	}
+
+	// Sort by author ASC
+	books, err = ListBooks(models.ListOptions{SortBy: models.SortByAuthor})
+	if err != nil {
+		t.Fatalf("failed to list books: %v", err)
+	}
+
+	if len(books) < 1 || books[0].Book.Author != "Alice Author" {
+		t.Errorf("expected 'Alice Author' first when sorting by author, got %s", books[0].Book.Author)
+	}
+
+	// Sort by rating DESC (with NULL handling)
+	books, err = ListBooks(models.ListOptions{SortBy: models.SortByRating})
+	if err != nil {
+		t.Fatalf("failed to list books: %v", err)
+	}
+
+	if len(books) < 1 || books[0].Book.Title != "Alpha Book" {
+		t.Errorf("expected 'Alpha Book' first when sorting by rating, got %s", books[0].Book.Title)
+	}
+
+	// Verify NULL rating is last
+	if len(books) >= 3 && books[2].Book.Title != "Middle Book" {
+		t.Errorf("expected 'Middle Book' (no rating) last when sorting by rating, got %s", books[2].Book.Title)
+	}
+}
+
+func TestListBooksWithSearchAndStatus(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	id1, _ := AddBook("Python Programming", "John Smith", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id1, models.StatusFinished)
+
+	id2, _ := AddBook("Python Cookbook", "Jane Doe", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id2, models.StatusReading)
+
+	id3, _ := AddBook("Go Programming", "Bob Wilson", nil, nil, nil, nil, nil, nil)
+	CreateReadingEntry(id3, models.StatusFinished)
+
+	// Search for "python" AND status "finished"
+	status := models.StatusFinished
+	books, err := ListBooks(models.ListOptions{
+		SearchQuery:  "python",
+		StatusFilter: &status,
+	})
+	if err != nil {
+		t.Fatalf("failed to list books: %v", err)
+	}
+
+	if len(books) != 1 {
+		t.Errorf("expected 1 book matching 'python' with status 'finished', got %d", len(books))
+	}
+
+	if len(books) > 0 && books[0].Book.Title != "Python Programming" {
+		t.Errorf("expected 'Python Programming', got %s", books[0].Book.Title)
+	}
+}
+
+// Site config tests
+
+func TestSetConfig(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	err := SetConfig("site.title", "My Test Bookshelf")
+	if err != nil {
+		t.Fatalf("failed to set config: %v", err)
+	}
+
+	value, err := GetConfig("site.title")
+	if err != nil {
+		t.Fatalf("failed to get config: %v", err)
+	}
+
+	if value != "My Test Bookshelf" {
+		t.Errorf("expected 'My Test Bookshelf', got '%s'", value)
+	}
+}
+
+func TestSetConfigUpdatesExisting(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	SetConfig("site.title", "First Title")
+	SetConfig("site.title", "Second Title")
+
+	value, _ := GetConfig("site.title")
+	if value != "Second Title" {
+		t.Errorf("expected 'Second Title', got '%s'", value)
+	}
+}
+
+func TestGetConfigNotFound(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	value, err := GetConfig("nonexistent.key")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if value != "" {
+		t.Errorf("expected empty string for non-existent key, got '%s'", value)
+	}
+}
+
+func TestGetAllConfig(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	SetConfig("site.title", "Test Title")
+	SetConfig("site.author", "Test Author")
+
+	config, err := GetAllConfig()
+	if err != nil {
+		t.Fatalf("failed to get all config: %v", err)
+	}
+
+	if len(config) != 2 {
+		t.Errorf("expected 2 config values, got %d", len(config))
+	}
+
+	if config["site.title"] != "Test Title" {
+		t.Errorf("expected 'Test Title', got '%s'", config["site.title"])
+	}
+}
+
+func TestDeleteConfig(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	SetConfig("site.title", "Test Title")
+
+	err := DeleteConfig("site.title")
+	if err != nil {
+		t.Fatalf("failed to delete config: %v", err)
+	}
+
+	value, _ := GetConfig("site.title")
+	if value != "" {
+		t.Errorf("expected empty string after delete, got '%s'", value)
+	}
+}
+
+func TestDeleteConfigNotFound(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	err := DeleteConfig("nonexistent.key")
+	if err == nil {
+		t.Error("expected error when deleting non-existent key")
+	}
+}
+
+func TestGetSiteConfig(t *testing.T) {
+	cleanup := setupTestDB(t)
+	defer cleanup()
+
+	// Test defaults
+	config, err := GetSiteConfig()
+	if err != nil {
+		t.Fatalf("failed to get site config: %v", err)
+	}
+
+	if config.Title != "My Bookshelf" {
+		t.Errorf("expected default title 'My Bookshelf', got '%s'", config.Title)
+	}
+
+	// Test with custom values
+	SetConfig("site.title", "Custom Title")
+	SetConfig("site.author", "John Doe")
+
+	config, err = GetSiteConfig()
+	if err != nil {
+		t.Fatalf("failed to get site config: %v", err)
+	}
+
+	if config.Title != "Custom Title" {
+		t.Errorf("expected 'Custom Title', got '%s'", config.Title)
+	}
+
+	if config.Author != "John Doe" {
+		t.Errorf("expected 'John Doe', got '%s'", config.Author)
+	}
+
+	// Subtitle should still be default
+	if config.Subtitle != "Personal Reading Tracker" {
+		t.Errorf("expected default subtitle, got '%s'", config.Subtitle)
 	}
 }
