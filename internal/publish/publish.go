@@ -12,11 +12,19 @@ import (
 	"time"
 )
 
+type GoalProgress struct {
+	Target  int
+	Current int
+	Percent int
+	Year    int
+}
+
 type SiteData struct {
 	Books       []models.BookWithEntry
 	Stats       *db.Stats
 	Config      models.SiteConfig
 	Genres      []string
+	Goal        *GoalProgress
 	GeneratedAt string
 }
 
@@ -48,6 +56,33 @@ func Generate(outputDir string) error {
 		return fmt.Errorf("failed to fetch site config: %w", err)
 	}
 
+	// Fetch reading goal for current year
+	currentYear := time.Now().Year()
+	var goalProgress *GoalProgress
+	goal, err := db.GetGoal(currentYear)
+	if err != nil {
+		return fmt.Errorf("failed to fetch reading goal: %w", err)
+	}
+	if goal != nil {
+		booksFinished, err := db.GetBooksFinishedInYear(currentYear)
+		if err != nil {
+			return fmt.Errorf("failed to fetch books finished: %w", err)
+		}
+		percent := 0
+		if goal.Target > 0 {
+			percent = (booksFinished * 100) / goal.Target
+			if percent > 100 {
+				percent = 100
+			}
+		}
+		goalProgress = &GoalProgress{
+			Target:  goal.Target,
+			Current: booksFinished,
+			Percent: percent,
+			Year:    currentYear,
+		}
+	}
+
 	// Collect unique genres
 	genres := collectUniqueGenres(books)
 
@@ -59,6 +94,7 @@ func Generate(outputDir string) error {
 		Stats:       stats,
 		Config:      config,
 		Genres:      genres,
+		Goal:        goalProgress,
 		GeneratedAt: generatedAt,
 	}
 
@@ -286,6 +322,21 @@ const indexTemplate = `<!DOCTYPE html>
             </div>
             {{end}}
         </section>
+
+        {{if .Goal}}
+        <section class="reading-goal">
+            <h2>{{.Goal.Year}} Reading Goal</h2>
+            <div class="goal-progress">
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{.Goal.Percent}}%"></div>
+                </div>
+                <div class="goal-stats">
+                    <span class="goal-current">{{.Goal.Current}} of {{.Goal.Target}} books</span>
+                    <span class="goal-percent">{{.Goal.Percent}}%</span>
+                </div>
+            </div>
+        </section>
+        {{end}}
 
         {{if .Books}}
         <section class="books">
@@ -619,6 +670,56 @@ main {
 .stat-card.highlight .stat-number,
 .stat-card.highlight .stat-label {
     color: white;
+}
+
+.reading-goal {
+    background: var(--bg-card);
+    padding: 1.5rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px var(--shadow);
+    margin-bottom: 2rem;
+}
+
+.reading-goal h2 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    color: var(--text-primary);
+}
+
+.goal-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.progress-bar {
+    height: 24px;
+    background: var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    transition: width 0.3s ease;
+    min-width: 0;
+}
+
+.goal-stats {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.9rem;
+}
+
+.goal-current {
+    color: var(--text-secondary);
+}
+
+.goal-percent {
+    font-weight: 600;
+    color: var(--accent);
 }
 
 .stat-number {
