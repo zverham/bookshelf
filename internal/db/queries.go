@@ -116,19 +116,25 @@ func ListBooks(opts models.ListOptions) ([]models.BookWithEntry, error) {
 }
 
 func UpdateStatus(bookID int64, status models.BookStatus) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
-	var startedAt, finishedAt interface{}
+	return UpdateStatusWithDate(bookID, status, true)
+}
 
-	switch status {
-	case models.StatusReading:
-		startedAt = now
-	case models.StatusFinished:
-		finishedAt = now
+func UpdateStatusWithDate(bookID int64, status models.BookStatus, setDate bool) error {
+	now := time.Now().Format("2006-01-02 15:04:05")
+	var startedAt, finishedAt any
+
+	if setDate {
+		switch status {
+		case models.StatusReading:
+			startedAt = now
+		case models.StatusFinished:
+			finishedAt = now
+		}
 	}
 
 	_, err := DB.Exec(`
 		UPDATE reading_entries
-		SET status = ?, started_at = COALESCE(?, started_at), finished_at = ?, updated_at = ?
+		SET status = ?, started_at = COALESCE(?, started_at), finished_at = COALESCE(?, finished_at), updated_at = ?
 		WHERE book_id = ?
 	`, status, startedAt, finishedAt, now, bookID)
 	return err

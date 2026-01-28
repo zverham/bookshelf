@@ -42,4 +42,5 @@ func init() {
 	rootCmd.AddCommand(refreshCmd)
 	rootCmd.AddCommand(goalCmd)
 	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(logCmd)
 }
