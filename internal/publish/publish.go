@@ -16,6 +16,7 @@ type SiteData struct {
 	Books       []models.BookWithEntry
 	Stats       *db.Stats
 	Config      models.SiteConfig
+	Genres      []string
 	GeneratedAt string
 }
 
@@ -47,6 +48,9 @@ func Generate(outputDir string) error {
 		return fmt.Errorf("failed to fetch site config: %w", err)
 	}
 
+	// Collect unique genres
+	genres := collectUniqueGenres(books)
+
 	generatedAt := time.Now().Format("January 2, 2006")
 
 	// Generate index page
@@ -54,6 +58,7 @@ func Generate(outputDir string) error {
 		Books:       books,
 		Stats:       stats,
 		Config:      config,
+		Genres:      genres,
 		GeneratedAt: generatedAt,
 	}
 
@@ -121,6 +126,37 @@ func generateCSS(outputDir string) error {
 	return os.WriteFile(filepath.Join(outputDir, "style.css"), []byte(cssStyles), 0644)
 }
 
+// collectUniqueGenres extracts all unique genres from a list of books, sorted alphabetically.
+func collectUniqueGenres(books []models.BookWithEntry) []string {
+	genreSet := make(map[string]bool)
+	for _, book := range books {
+		if book.Book.Genres.Valid && book.Book.Genres.String != "" {
+			var genres []string
+			if err := json.Unmarshal([]byte(book.Book.Genres.String), &genres); err == nil {
+				for _, g := range genres {
+					genreSet[g] = true
+				}
+			}
+		}
+	}
+
+	genres := make([]string, 0, len(genreSet))
+	for g := range genreSet {
+		genres = append(genres, g)
+	}
+
+	// Sort alphabetically
+	for i := 0; i < len(genres)-1; i++ {
+		for j := i + 1; j < len(genres); j++ {
+			if strings.ToLower(genres[i]) > strings.ToLower(genres[j]) {
+				genres[i], genres[j] = genres[j], genres[i]
+			}
+		}
+	}
+
+	return genres
+}
+
 func templateFuncs() template.FuncMap {
 	return template.FuncMap{
 		"statusClass": func(status models.BookStatus) string {
@@ -176,6 +212,25 @@ func templateFuncs() template.FuncMap {
 				return nil
 			}
 			return genres
+		},
+		"genresDataAttr": func(genresJSON string) string {
+			if genresJSON == "" {
+				return ""
+			}
+			var genres []string
+			if err := json.Unmarshal([]byte(genresJSON), &genres); err != nil {
+				return ""
+			}
+			// Convert to lowercase and replace spaces with hyphens for CSS-friendly class names
+			var result []string
+			for _, g := range genres {
+				normalized := strings.ToLower(strings.ReplaceAll(g, " ", "-"))
+				result = append(result, normalized)
+			}
+			return strings.Join(result, " ")
+		},
+		"slugify": func(s string) string {
+			return strings.ToLower(strings.ReplaceAll(s, " ", "-"))
 		},
 	}
 }
@@ -236,16 +291,28 @@ const indexTemplate = `<!DOCTYPE html>
         <section class="books">
             <div class="books-header">
                 <h2>All Books</h2>
-                <div class="filter-tabs">
-                    <button class="filter-btn active" data-filter="all">All</button>
-                    <button class="filter-btn" data-filter="reading">Reading</button>
-                    <button class="filter-btn" data-filter="finished">Finished</button>
-                    <button class="filter-btn" data-filter="wanttoread">Want to Read</button>
+                <div class="filters">
+                    <div class="filter-tabs">
+                        <button class="filter-btn active" data-filter="all">All</button>
+                        <button class="filter-btn" data-filter="reading">Reading</button>
+                        <button class="filter-btn" data-filter="finished">Finished</button>
+                        <button class="filter-btn" data-filter="wanttoread">Want to Read</button>
+                    </div>
+                    {{if .Genres}}
+                    <div class="genre-filter">
+                        <select id="genre-select">
+                            <option value="all">All Genres</option>
+                            {{range .Genres}}
+                            <option value="{{slugify .}}">{{.}}</option>
+                            {{end}}
+                        </select>
+                    </div>
+                    {{end}}
                 </div>
             </div>
             <div class="book-grid">
                 {{range .Books}}
-                <article class="book-card" data-status="{{statusClass .ReadingEntry.Status}}">
+                <article class="book-card" data-status="{{statusClass .ReadingEntry.Status}}" data-genres="{{if .Book.Genres.Valid}}{{genresDataAttr .Book.Genres.String}}{{end}}">
                     <a href="books/{{.Book.ID}}.html" class="book-cover-link">
                         {{if .Book.CoverURL.Valid}}
                         <img src="{{.Book.CoverURL.String}}" alt="{{.Book.Title}}" class="book-cover" loading="lazy">
@@ -287,20 +354,36 @@ const indexTemplate = `<!DOCTYPE html>
     </footer>
 
     <script>
-    document.querySelectorAll('.filter-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const filter = btn.dataset.filter;
+    (function() {
+        let currentStatus = 'all';
+        let currentGenre = 'all';
+
+        function applyFilters() {
             document.querySelectorAll('.book-card').forEach(card => {
-                if (filter === 'all' || card.dataset.status === filter) {
-                    card.style.display = '';
-                } else {
-                    card.style.display = 'none';
-                }
+                const statusMatch = currentStatus === 'all' || card.dataset.status === currentStatus;
+                const cardGenres = card.dataset.genres || '';
+                const genreMatch = currentGenre === 'all' || cardGenres.split(' ').includes(currentGenre);
+                card.style.display = (statusMatch && genreMatch) ? '' : 'none';
+            });
+        }
+
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentStatus = btn.dataset.filter;
+                applyFilters();
             });
         });
-    });
+
+        const genreSelect = document.getElementById('genre-select');
+        if (genreSelect) {
+            genreSelect.addEventListener('change', () => {
+                currentGenre = genreSelect.value;
+                applyFilters();
+            });
+        }
+    })();
     </script>
 </body>
 </html>`
@@ -564,6 +647,13 @@ main {
     margin: 0;
 }
 
+.filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
 .filter-tabs {
     display: flex;
     gap: 0.5rem;
@@ -590,6 +680,30 @@ main {
     background: var(--accent);
     border-color: var(--accent);
     color: white;
+}
+
+.genre-filter select {
+    padding: 0.5rem 2rem 0.5rem 1rem;
+    border: 1px solid var(--border);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    border-radius: 20px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+}
+
+.genre-filter select:hover {
+    border-color: var(--accent);
+}
+
+.genre-filter select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(52, 152, 219, 0.2);
 }
 
 .book-grid {
